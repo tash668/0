@@ -271,7 +271,7 @@
         </div>
     </div>
 
-    <script type="module">
+<script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
         import { 
             getFirestore, 
@@ -280,7 +280,9 @@
             onSnapshot 
         } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
 
-        // --- ⚙️ 【重要】Firebaseの設定をご自身のものに書き換えてください ---
+        // ====================================================================
+        // 📍 【重要】Firebaseの設定をご自身のものに書き換えてください
+        // ====================================================================
 	const firebaseConfig = {
 	  apiKey: "AIzaSyC7iyRQOK598f-Ksn_0nZFcTdH5pRWo1AM",
 	  authDomain: "tash08-578bc.firebaseapp.com",
@@ -291,14 +293,23 @@
 	  measurementId: "G-EDD2T75WRQ"
 	};
 
-        // Firebase初期化
+        // ====================================================================
+        // 1. 最初に `db` 変数を確実にグローバル（このスクリプト内全体）で定義する
+        // ====================================================================
+        let db = null;
+
         if (firebaseConfig.apiKey !== "AIzaSyC7iyRQOK598f-Ksn_0nZFcTdH5pRWo1AM") {
             const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
+            
+            // 👇 新しいデータベースを追加した場合は、第2引数にデータベースIDを指定します
+            //    デフォルトのデータベースを使う場合は `db = getFirestore(app);` にしてください
+            db = getFirestore(app, "calendar-db"); 
         }
 
-        // メインデータ管理オブジェクト（Firebase未設定時はデフォルト表示用のダミーとして機能）
-        let events = {};
+        // ====================================================================
+        // 2. カレンダーのメインロジック
+        // ====================================================================
+        let events = {}; // Firebaseから読み込んだデータを格納する変数
 
         const realToday = new Date();
         const realTomorrow = new Date();
@@ -317,7 +328,7 @@
         // --- 🔥 Firebase Firestore リアルタイム同期の設定 ---
         function initFirebaseSync() {
             if (!db) {
-                // Firebase未設定時の初期フォールバックデータ
+                // Firebaseがまだ設定されていない場合のテスト用初期データ
                 events = {
                     [getDateKey(realToday)]: [
                         { name: "田中", time: "10:00", isAllDay: false, detail: "クライアントMTG" },
@@ -354,7 +365,6 @@
             if (!db) return;
             try {
                 const docRef = doc(db, "calendars", "main_schedule");
-                // ドキュメント全体を現在のeventsオブジェクトで上書き保存
                 await setDoc(docRef, events);
             } catch (e) {
                 console.error("Firebase保存失敗: ", e);
@@ -541,7 +551,6 @@
                     container.appendChild(item);
                 });
 
-                // イベントリスナーの動的バインド（type=module用）
                 container.querySelectorAll('.btn-inline-edit').forEach(btn => {
                     btn.addEventListener('click', (e) => editEventInline(parseInt(e.target.dataset.index)));
                 });
@@ -578,7 +587,7 @@
                 events[selectedDateKey].splice(index, 1);
                 if (events[selectedDateKey].length === 0) delete events[selectedDateKey];
                 
-                await syncToFirebase(); // Firebase側へ送信
+                await syncToFirebase();
                 if (!db) { refreshAllViews(); renderSelectedDateDetails(); }
             }
         }
@@ -614,7 +623,7 @@
                 events[selectedDateKey].push(eventData);
             }
 
-            await syncToFirebase(); // Firebase側へ送信
+            await syncToFirebase();
             closeInputModal();
             if (!db) { refreshAllViews(); renderSelectedDateDetails(); }
         }
@@ -625,7 +634,7 @@
             renderCalendar();
         }
 
-        // type="module"内でグローバルに関数を露出させる（ナビゲーションボタン用）
+        // HTML側のイベント用に関数をwindowオブジェクトへ紐付け
         window.changeMonth = changeMonth;
         window.handleChoice = handleChoice;
         window.closeChoiceModal = closeChoiceModal;
@@ -633,7 +642,7 @@
         window.saveEvent = saveEvent;
         window.toggleTimeInput = toggleTimeInput;
 
-        // 初期セットアップ起動
+        // 🚀 初期起動
         initHeaders();
         initFirebaseSync();
     </script>
