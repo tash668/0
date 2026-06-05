@@ -300,10 +300,7 @@
 
         if (firebaseConfig.apiKey !== "AIzaSyC7iyRQOK598f-Ksn_0nZFcTdH5pRWo1AM") {
             const app = initializeApp(firebaseConfig);
-            
-            // 👇 新しいデータベースを追加した場合は、第2引数にデータベースIDを指定します
-            //    デフォルトのデータベースを使う場合は `db = getFirestore(app);` にしてください
-            db = getFirestore(app, "calendar-db"); 
+            db = getFirestore(app); 
         }
 
         // ====================================================================
