@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Calendar with Firebase</title>
+    <style>
+        :root {
+            /* 全体・上部用（ライトモード） */
+            --apple-blue: #0071e3;
+            --apple-red: #ff3b30;
+            --apple-orange: #ff9500;
+            --bg-color: #f5f5f7;
+            --card-bg: #ffffff;
+            --text-main: #1d1d1f;
+            --text-sub: #86868b;
+            --border-color: #e5e5ea;
+
+            /* カレンダーエリア専用（ダークモード） */
+            --cal-bg: #1c1c1e;         
+            --cal-text-main: #ffffff;  
+            --cal-text-sub: #8e8e93;   
+            --cal-blue: #0a84ff;       
+            --cal-red: #ff453a;        
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        /* 1. 本日の年月日表示 */
+        .single-day-header {
+            padding: 8px 0 4px 0;
+        }
+        .header-box .date-sub { 
+            font-size: 13px; 
+            font-weight: 600; 
+            letter-spacing: 0.5px; 
+            margin-bottom: 2px; 
+            color: var(--apple-red); 
+        }
+        .header-box .date-main { 
+            font-size: 26px; 
+            font-weight: 700; 
+            color: var(--text-main); 
+        }
+
+        /* Apple風カード共通 */
+        .apple-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+        }
+
+        /* 2. 本日・翌日の予定表示エリア */
+        .schedule-section { display: flex; flex-direction: column; gap: 16px; }
+        .section-title { font-size: 13px; font-weight: 600; color: var(--text-sub); margin-bottom: 2px; padding-left: 4px; }
+        .day-group { display: flex; flex-direction: column; gap: 8px; }
+        .day-label { font-size: 12px; font-weight: 600; color: var(--text-sub); border-bottom: 1px solid #f2f2f7; padding-bottom: 4px; margin-bottom: 2px; }
+        .no-events { font-size: 13px; color: #c7c7cc; padding: 12px; background: #fafafa; border-radius: 8px; border: 1px dashed var(--border-color); }
+
+        /* タイムラインアイテム */
+        .timeline-item { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; padding: 10px 12px; background: #f9f9fb; border-radius: 4px 8px 8px 4px; font-size: 14px; border-left: 4px solid var(--apple-blue); align-items: center; }
+        .today-item { border-left: 4px solid var(--apple-red); }
+        .tomorrow-item { border-left: 4px solid var(--apple-orange); }
+        .item-left { display: flex; flex-direction: column; justify-content: center; min-width: 60px; }
+        
+        /* 終日バッジ */
+        .item-time { font-weight: 600; color: var(--text-main); }
+        .item-time.all-day { color: #fff; background: var(--apple-blue); font-size: 11px; padding: 2px 6px; border-radius: 4px; text-align: center; }
+        .today-item .item-time.all-day { background: var(--apple-red); }
+        .tomorrow-item .item-time.all-day { background: var(--apple-orange); }
+        
+        .item-name { font-size: 11px; color: var(--text-sub); margin-top: 4px; background: #e8e8ed; padding: 2px 6px; border-radius: 10px; text-align: center; display: inline-block; width: fit-content; }
+        .item-right { display: flex; align-items: center; font-weight: 500; color: #3a3a3c; line-height: 1.4; }
+
+        /* ボタンエリア */
+        .item-actions { display: flex; gap: 6px; }
+        .btn-inline { border: none; padding: 6px 10px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; }
+        .btn-inline-edit { background: #e8e8ed; color: var(--apple-blue); }
+        .btn-inline-edit:active { background: #d1d1d6; }
+        .btn-inline-delete { background: #ffebeb; color: var(--apple-red); }
+        .btn-inline-delete:active { background: #ffd6d6; }
+
+        /* 3. 指定日詳細エリア */
+        .selected-detail-section { display: none; flex-direction: column; gap: 8px; margin-top: 4px; }
+        .selected-detail-section.active { display: flex; }
+
+        /* 4. 月単位のカレンダーエリア */
+        .calendar-section { 
+            display: flex;
+            flex-direction: column;
+            background: var(--cal-bg) !important; 
+            color: var(--cal-text-main) !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 16px;
+            border-radius: 12px;
+        }
+        .calendar-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .calendar-nav h2 { font-size: 17px; font-weight: 600; color: var(--cal-text-main); }
+        
+        .nav-btns { display: flex; gap: 8px; }
+        .nav-btns button { background: #2c2c2e; border: none; color: var(--cal-blue); font-size: 14px; font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+        .nav-btns button:active { background: #3a3a3c; }
+        
+        .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; font-weight: 600; color: var(--cal-text-sub); margin-bottom: 12px; }
+        .weekdays div:nth-child(6) { color: var(--cal-blue); }
+        .weekdays div:nth-child(7) { color: var(--cal-red); }
+
+        /* カレンダーグリッド */
+        .days-grid { 
+            display: grid; 
+            grid-template-columns: repeat(7, 1fr); 
+            gap: 6px 4px;
+        }
+        
+        .day-cell { 
+            background: transparent; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: flex-start; 
+            padding: 4px 2px; 
+            min-height: 48px; 
+            cursor: pointer; 
+            border-radius: 8px; 
+        }
+        .day-cell:active { background-color: #2c2c2e; }
+        
+        /* 日付数字 */
+        .day-number { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; border-radius: 50%; color: var(--cal-text-main); }
+        .other-month .day-number { color: #545456; }
+        .is-today .day-number { background-color: var(--cal-red); color: #ffffff; font-weight: 600; }
+        
+        .cell-name-container { width: 100%; display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+        
+        /* 予定バッジ */
+        .cell-name-badge { font-size: 9px; font-weight: 600; color: #fff; background-color: var(--cal-blue); padding: 1px 3px; border-radius: 3px; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .other-month .cell-name-badge { background-color: rgba(10, 132, 255, 0.35); color: rgba(255, 255, 255, 0.7); }
+        .is-today .cell-name-badge { background-color: rgba(255, 255, 255, 0.25); color: #ffffff; }
+
+        /* モーダル関連 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); display: flex; justify-content: center; align-items: flex-end; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content { background: #1c1c1e; border-top: 1px solid #2c2c2e; width: 100%; max-width: 500px; border-radius: 16px 16px 0 0; padding: 20px; transform: translateY(100%); transition: transform 0.2s ease; color: #fff; }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        
+        .action-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+        .btn-action { width: 100%; padding: 16px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; text-align: center; }
+        .btn-action-primary { background: #0a84ff; color: #fff; }
+        .btn-action-secondary { background: #2c2c2e; color: #0a84ff; }
+        .btn-action-cancel { background: #3a3a3c; color: #fff; margin-top: 6px; }
+
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 12px; font-weight: 600; color: #8e8e93; margin-bottom: 6px; }
+        .form-group input[type="text"], .form-group input[type="time"] { width: 100%; padding: 12px; background: #2c2c2e; border: 1px solid #38383a; border-radius: 10px; font-size: 15px; color: #fff; outline: none; }
+        .form-group input[type="text"]::placeholder { color: #636366; }
+        
+        .allday-switch-group { display: flex; align-items: center; justify-content: space-between; background: #2c2c2e; padding: 12px; border-radius: 10px; margin-bottom: 16px; border: 1px solid #38383a; }
+        .allday-switch-group label { margin-bottom: 0; font-size: 14px; color: #fff; }
+        .allday-switch-group input[type="checkbox"] { width: 20px; height: 20px; accent-color: #0a84ff; cursor: pointer; }
+
+        .modal-actions { display: flex; gap: 12px; margin-top: 24px; }
+        .modal-actions button { flex: 1; padding: 12px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
+        .btn-cancel { background: #3a3a3c; color: #fff; }
+        .btn-save { background: #0a84ff; color: #fff; }
+
+        @media (min-width: 500px) {
+            .modal-overlay { align-items: center; }
+            .modal-content { border-radius: 16px; border: 1px solid #2c2c2e; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="single-day-header">
+        <div class="header-box">
+            <div class="date-sub" id="today-dayofweek">今日</div>
+            <div class="date-main" id="today-date">0/0</div>
+        </div>
+    </div>
+
+    <div>
+        <div class="section-title">スケジュール (今日・明日)</div>
+        <div class="apple-card schedule-section">
+            <div class="day-group">
+                <div class="day-label">今日</div>
+                <div id="today-events-list"></div>
+            </div>
+            <div class="day-group">
+                <div class="day-label">明日</div>
+                <div id="tomorrow-events-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="selectedDetailSection" class="selected-detail-section">
+        <div class="section-title" id="selectedDetailTitle">指定日の詳細</div>
+        <div class="apple-card day-group" id="selected-events-list" style="padding: 16px; background: #fff; color: #1d1d1f;"></div>
+    </div>
+
+    <div class="apple-card calendar-section">
+        <div class="calendar-nav">
+            <h2 id="month-display">2026年6月</h2>
+            <div class="nav-btns">
+                <button onclick="changeMonth(-1)">前月</button>
+                <button onclick="changeMonth(1)">次月</button>
+            </div>
+        </div>
+        <div class="weekdays">
+            <div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div><div>日</div>
+        </div>
+        <div class="days-grid" id="days-grid"></div>
+    </div>
+
+    <div class="modal-overlay" id="choiceModalOverlay">
+        <div class="modal-content">
+            <div class="section-title" id="choiceModalTitle">日付を選択</div>
+            <div class="action-buttons">
+                <button class="btn-action btn-action-primary" onclick="handleChoice('add')">予定を追加する</button>
+                <button class="btn-action btn-action-secondary" onclick="handleChoice('view')">この日の詳細を見る</button>
+                <button class="btn-action btn-action-cancel" onclick="closeChoiceModal()">キャンセル</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="inputModalOverlay">
+        <div class="modal-content">
+            <div class="section-title" id="inputModalTitle">予定を追加</div>
+            <div class="form-group">
+                <label for="inputName">お名前</label>
+                <input type="text" id="inputName" placeholder="例: 田中">
+            </div>
+            <div class="allday-switch-group">
+                <label for="inputAllDay">終日項目にする</label>
+                <input type="checkbox" id="inputAllDay" onchange="toggleTimeInput(this.checked)">
+            </div>
+            <div class="form-group" id="timeFormGroup">
+                <label for="inputTime">時間</label>
+                <input type="time" id="inputTime" value="12:00">
+            </div>
+            <div class="form-group">
+                <label for="inputDetail">詳細</label>
+                <input type="text" id="inputDetail" placeholder="例: 出張 / お休み">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeInputModal()">戻る</button>
+                <button class="btn-save" onclick="saveEvent()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            onSnapshot 
+        } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
+
+        // --- ⚙️ 【重要】Firebaseの設定をご自身のものに書き換えてください ---
+	const firebaseConfig = {
+	  apiKey: "AIzaSyC7iyRQOK598f-Ksn_0nZFcTdH5pRWo1AM",
+	  authDomain: "tash08-578bc.firebaseapp.com",
+	  projectId: "tash08-578bc",
+	  storageBucket: "tash08-578bc.firebasestorage.app",
+	  messagingSenderId: "58694250532",
+	  appId: "1:58694250532:web:93d2738e6e666ebc20e8b1",
+	  measurementId: "G-EDD2T75WRQ"
+	};
+
+        // Firebase初期化
+        let db = null;
+        if (firebaseConfig.apiKey !== "AIzaSyC7iyRQOK598f-Ksn_0nZFcTdH5pRWo1AM") {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+        }
+
+        // メインデータ管理オブジェクト（Firebase未設定時はデフォルト表示用のダミーとして機能）
+        let events = {};
+
+        const realToday = new Date();
+        const realTomorrow = new Date();
+        realTomorrow.setDate(realToday.getDate() + 1);
+
+        let currentCalendarDate = new Date();
+        let selectedDateKey = ""; 
+        let selectedDateDisplayLabel = "";
+        let editingIndex = null; 
+        const daysShort = ['日', '月', '火', '水', '木', '金', '土'];
+
+        function getDateKey(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        // --- 🔥 Firebase Firestore リアルタイム同期の設定 ---
+        function initFirebaseSync() {
+            if (!db) {
+                // Firebase未設定時の初期フォールバックデータ
+                events = {
+                    [getDateKey(realToday)]: [
+                        { name: "田中", time: "10:00", isAllDay: false, detail: "クライアントMTG" },
+                        { name: "佐藤", time: "", isAllDay: true, detail: "創立記念日でお休み" }
+                    ],
+                    [getDateKey(realTomorrow)]: [
+                        { name: "鈴木", time: "11:00", isAllDay: false, detail: "週次定例会" }
+                    ]
+                };
+                refreshAllViews();
+                return;
+            }
+
+            // `calendars` コレクションの `main_schedule` ドキュメントを常時監視
+            const docRef = doc(db, "calendars", "main_schedule");
+            onSnapshot(docRef, (snapshot) => {
+                if (snapshot.exists()) {
+                    events = snapshot.data();
+                } else {
+                    events = {};
+                }
+                refreshAllViews();
+                // 指定日タイムラインが現在開かれていれば再描画
+                if (document.getElementById('selectedDetailSection').classList.contains('active')) {
+                    renderSelectedDateDetails();
+                }
+            }, (error) => {
+                console.error("Firebaseデータ同期エラー: ", error);
+            });
+        }
+
+        // データをFirestoreに送信する関数
+        async function syncToFirebase() {
+            if (!db) return;
+            try {
+                const docRef = doc(db, "calendars", "main_schedule");
+                // ドキュメント全体を現在のeventsオブジェクトで上書き保存
+                await setDoc(docRef, events);
+            } catch (e) {
+                console.error("Firebase保存失敗: ", e);
+                alert("データの保存に失敗しました: " + e.message);
+            }
+        }
+
+        function refreshAllViews() {
+            renderCalendar();
+            renderDetailedList();
+        }
+
+        function toggleTimeInput(isAllDay) {
+            const timeInput = document.getElementById('inputTime');
+            const timeGroup = document.getElementById('timeFormGroup');
+            if (isAllDay) {
+                timeInput.disabled = true;
+                timeGroup.style.opacity = "0.2";
+            } else {
+                timeInput.disabled = false;
+                timeGroup.style.opacity = "1";
+            }
+        }
+
+        function sortEvents(eventList) {
+            if (!eventList) return [];
+            return eventList.sort((a, b) => {
+                if (a.isAllDay && !b.isAllDay) return -1;
+                if (!a.isAllDay && b.isAllDay) return 1;
+                return a.time.localeCompare(b.time);
+            });
+        }
+
+        function initHeaders() {
+            document.getElementById('today-dayofweek').innerText = `今日 (${daysShort[realToday.getDay()]})`;
+            document.getElementById('today-date').innerText = `${realToday.getMonth() + 1}月${realToday.getDate()}日`;
+        }
+
+        function renderDetailedList() {
+            renderDayList(realToday, 'today-events-list', 'today-item');
+            renderDayList(realTomorrow, 'tomorrow-events-list', 'tomorrow-item');
+        }
+
+        function renderDayList(date, containerId, itemClass) {
+            const key = getDateKey(date);
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+
+            if (events[key] && events[key].length > 0) {
+                const sortedEvents = sortEvents([...events[key]]);
+                sortedEvents.forEach(eventObj => {
+                    const item = document.createElement('div');
+                    item.classList.add('timeline-item', itemClass);
+                    
+                    const timeDisplay = eventObj.isAllDay 
+                        ? `<span class="item-time all-day">終日</span>` 
+                        : `<span class="item-time">${eventObj.time}</span>`;
+
+                    item.innerHTML = `
+                        <div class="item-left">
+                            ${timeDisplay}
+                            <span class="item-name">${eventObj.name}</span>
+                        </div>
+                        <div class="item-right">${eventObj.detail}</div>
+                        <div></div>
+                    `;
+                    container.appendChild(item);
+                });
+            } else {
+                const noEvent = document.createElement('div');
+                noEvent.classList.add('no-events');
+                noEvent.innerText = '予定なし';
+                container.appendChild(noEvent);
+            }
+        }
+
+        function renderCalendar() {
+            const year = currentCalendarDate.getFullYear();
+            const month = currentCalendarDate.getMonth();
+            document.getElementById('month-display').innerText = `${year}年 ${month + 1}月`;
+
+            const daysGrid = document.getElementById('days-grid');
+            daysGrid.innerHTML = '';
+
+            let firstDayOfWeek = new Date(year, month, 1).getDay();
+            let startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+
+            const lastDateOfMonth = new Date(year, month + 1, 0).getDate();
+            const lastDateOfLastMonth = new Date(year, month, 0).getDate();
+
+            for (let i = startOffset; i > 0; i--) { createDayCell(year, month - 1, lastDateOfLastMonth - i + 1, true); }
+            for (let i = 1; i <= lastDateOfMonth; i++) {
+                const isToday = i === realToday.getDate() && month === realToday.getMonth() && year === realToday.getFullYear();
+                createDayCell(year, month, i, false, isToday);
+            }
+            const totalCells = startOffset + lastDateOfMonth;
+            for (let i = 1; i <= (42 - totalCells); i++) { createDayCell(year, month + 1, i, true); }
+        }
+
+        function createDayCell(year, month, day, isOtherMonth, isToday = false) {
+            const daysGrid = document.getElementById('days-grid');
+            const cellDate = new Date(year, month, day);
+            const dateKey = getDateKey(cellDate);
+
+            const cell = document.createElement('div');
+            cell.classList.add('day-cell');
+            if (isOtherMonth) cell.classList.add('other-month');
+            if (isToday) cell.classList.add('is-today');
+
+            const dayNumber = document.createElement('div');
+            dayNumber.classList.add('day-number');
+            dayNumber.innerText = cellDate.getDate();
+            cell.appendChild(dayNumber);
+
+            if (events[dateKey] && events[dateKey].length > 0) {
+                const nameContainer = document.createElement('div');
+                nameContainer.classList.add('cell-name-container');
+                const sortedEvents = sortEvents([...events[dateKey]]);
+                sortedEvents.forEach(eventObj => {
+                    const nameBadge = document.createElement('div');
+                    nameBadge.classList.add('cell-name-badge');
+                    nameBadge.innerText = eventObj.isAllDay ? `[終]${eventObj.name}` : eventObj.name;
+                    nameContainer.appendChild(nameBadge);
+                });
+                cell.appendChild(nameContainer);
+            }
+
+            cell.addEventListener('click', () => {
+                selectedDateKey = dateKey;
+                selectedDateDisplayLabel = `${cellDate.getMonth() + 1}月${cellDate.getDate()}日`;
+                openChoiceModal();
+            });
+
+            daysGrid.appendChild(cell);
+        }
+
+        function openChoiceModal() {
+            document.getElementById('choiceModalTitle').innerText = `${selectedDateDisplayLabel} の操作を選択`;
+            document.getElementById('choiceModalOverlay').classList.add('active');
+        }
+        function closeChoiceModal() {
+            document.getElementById('choiceModalOverlay').classList.remove('active');
+        }
+
+        function handleChoice(action) {
+            closeChoiceModal();
+            if (action === 'add') {
+                editingIndex = null;
+                setTimeout(openInputModal, 150);
+            } else if (action === 'view') {
+                setTimeout(renderSelectedDateDetails, 150);
+            }
+        }
+
+        function renderSelectedDateDetails() {
+            const container = document.getElementById('selected-events-list');
+            const section = document.getElementById('selectedDetailSection');
+            document.getElementById('selectedDetailTitle').innerText = `📅 ${selectedDateDisplayLabel} のタイムライン`;
+            
+            container.innerHTML = '';
+            
+            if (events[selectedDateKey] && events[selectedDateKey].length > 0) {
+                sortEvents(events[selectedDateKey]);
+
+                events[selectedDateKey].forEach((eventObj, index) => {
+                    const item = document.createElement('div');
+                    item.classList.add('timeline-item');
+
+                    const timeDisplay = eventObj.isAllDay 
+                        ? `<span class="item-time all-day">終日</span>` 
+                        : `<span class="item-time">${eventObj.time}</span>`;
+
+                    item.innerHTML = `
+                        <div class="item-left">
+                            ${timeDisplay}
+                            <span class="item-name" style="color:var(--text-sub);">${eventObj.name}</span>
+                        </div>
+                        <div class="item-right" style="color:#3a3a3c;">${eventObj.detail}</div>
+                        <div class="item-actions">
+                            <button class="btn-inline btn-inline-edit" data-index="${index}">修正</button>
+                            <button class="btn-inline btn-inline-delete" data-index="${index}">削除</button>
+                        </div>
+                    `;
+                    container.appendChild(item);
+                });
+
+                // イベントリスナーの動的バインド（type=module用）
+                container.querySelectorAll('.btn-inline-edit').forEach(btn => {
+                    btn.addEventListener('click', (e) => editEventInline(parseInt(e.target.dataset.index)));
+                });
+                container.querySelectorAll('.btn-inline-delete').forEach(btn => {
+                    btn.addEventListener('click', (e) => deleteEventInline(parseInt(e.target.dataset.index)));
+                });
+            } else {
+                const noEvent = document.createElement('div');
+                noEvent.classList.add('no-events');
+                noEvent.innerText = 'この日の予定はありません';
+                container.appendChild(noEvent);
+            }
+
+            section.classList.add('active');
+            section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function editEventInline(index) {
+            editingIndex = index;
+            const targetEvent = events[selectedDateKey][index];
+            
+            document.getElementById('inputModalTitle').innerText = `${selectedDateDisplayLabel} の予定を修正`;
+            document.getElementById('inputName').value = targetEvent.name;
+            document.getElementById('inputAllDay').checked = targetEvent.isAllDay;
+            document.getElementById('inputTime').value = targetEvent.isAllDay ? "12:00" : targetEvent.time;
+            document.getElementById('inputDetail').value = targetEvent.detail;
+            
+            toggleTimeInput(targetEvent.isAllDay);
+            document.getElementById('inputModalOverlay').classList.add('active');
+        }
+
+        async function deleteEventInline(index) {
+            if (confirm("この予定を削除してもよろしいですか？")) {
+                events[selectedDateKey].splice(index, 1);
+                if (events[selectedDateKey].length === 0) delete events[selectedDateKey];
+                
+                await syncToFirebase(); // Firebase側へ送信
+                if (!db) { refreshAllViews(); renderSelectedDateDetails(); }
+            }
+        }
+
+        function openInputModal() {
+            document.getElementById('inputModalTitle').innerText = `${selectedDateDisplayLabel} の予定を追加`;
+            document.getElementById('inputName').value = '';
+            document.getElementById('inputAllDay').checked = false;
+            document.getElementById('inputTime').value = '12:00';
+            document.getElementById('inputDetail').value = '';
+            toggleTimeInput(false);
+            document.getElementById('inputModalOverlay').classList.add('active');
+        }
+        function closeInputModal() { document.getElementById('inputModalOverlay').classList.remove('active'); }
+
+        async function saveEvent() {
+            const name = document.getElementById('inputName').value.trim();
+            const isAllDay = document.getElementById('inputAllDay').checked;
+            const time = isAllDay ? "" : document.getElementById('inputTime').value.trim();
+            const detail = document.getElementById('inputDetail').value.trim();
+
+            if (!name || (!isAllDay && !time) || !detail) {
+                alert("すべての項目を入力してください。");
+                return;
+            }
+
+            const eventData = { name, time, isAllDay, detail };
+
+            if (editingIndex !== null) {
+                events[selectedDateKey][editingIndex] = eventData;
+            } else {
+                if (!events[selectedDateKey]) events[selectedDateKey] = [];
+                events[selectedDateKey].push(eventData);
+            }
+
+            await syncToFirebase(); // Firebase側へ送信
+            closeInputModal();
+            if (!db) { refreshAllViews(); renderSelectedDateDetails(); }
+        }
+
+        function changeMonth(direction) {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
+            document.getElementById('selectedDetailSection').classList.remove('active');
+            renderCalendar();
+        }
+
+        // type="module"内でグローバルに関数を露出させる（ナビゲーションボタン用）
+        window.changeMonth = changeMonth;
+        window.handleChoice = handleChoice;
+        window.closeChoiceModal = closeChoiceModal;
+        window.closeInputModal = closeInputModal;
+        window.saveEvent = saveEvent;
+        window.toggleTimeInput = toggleTimeInput;
+
+        // 初期セットアップ起動
+        initHeaders();
+        initFirebaseSync();
+    </script>
+</body>
+</html>
