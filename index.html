@@ -33,7 +33,8 @@
         }
 
         html, body {
-            height: 100%;
+            height: auto; /* 全体も縦に自由に伸びるように変更 */
+            min-height: 100%;
             background-color: var(--bg-color);
             color: var(--text-main);
         }
@@ -115,10 +116,10 @@
             color: var(--cal-text-main) !important;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.05);
-            padding: 14px; /* スマホ向けに余白を微調整 */
+            padding: 14px; 
             border-radius: 12px;
             width: 100%;
-            overflow: hidden; /* はみ出しを完全に防止 */
+            height: auto; /* 高さを自動可変に設定 */
         }
         .calendar-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; width: 100%; }
         .calendar-nav h2 { font-size: 16px; font-weight: 600; color: var(--cal-text-main); }
@@ -136,8 +137,9 @@
         .days-grid { 
             display: grid; 
             grid-template-columns: repeat(7, 1fr); 
-            gap: 6px 3px; /* 横の隙間を少し狭めてスマホに収めやすく変更 */
+            gap: 6px 3px; 
             width: 100%;
+            height: auto; /* グリッド全体の高さ制限をなくす */
         }
         
         .day-cell { 
@@ -147,23 +149,23 @@
             align-items: center; 
             justify-content: flex-start; 
             padding: 4px 1px; 
-            min-height: 75px; 
+            min-height: 75px; /* 最低の高さは維持 */
+            height: auto;     /* 予定が増えたら縦に自動で伸びる */
             cursor: pointer; 
             border-radius: 6px; 
             width: 100%;
-            overflow: hidden;
         }
         .day-cell:active { background-color: #2c2c2e; }
         
         /* 日付数字 */
-        .day-number { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; border-radius: 50%; color: var(--cal-text-main); margin-bottom: 4px;}
+        .day-number { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; border-radius: 50%; color: var(--cal-text-main); margin-bottom: 4px; flex-shrink: 0; }
         .other-month .day-number { color: #545456; }
         .is-today .day-number { background-color: var(--cal-red); color: #ffffff; font-weight: 600; }
         
         .cell-name-container { width: 100%; display: flex; flex-direction: column; gap: 3px; }
         
         /* 予定バッジ */
-        .cell-name-badge { font-size: 8.5px; font-weight: 600; color: #fff; background-color: var(--cal-blue); padding: 2px 1px; border-radius: 3px; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 15px; line-height: 11px; }
+        .cell-name-badge { font-size: 8.5px; font-weight: 600; color: #fff; background-color: var(--cal-blue); padding: 2px 1px; border-radius: 3px; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 15px; line-height: 11px; flex-shrink: 0; }
         .cell-name-badge.placeholder { background-color: transparent !important; border: none !important; pointer-events: none; }
         
         .other-month .cell-name-badge { background-color: rgba(10, 132, 255, 0.35); color: rgba(255, 255, 255, 0.7); }
