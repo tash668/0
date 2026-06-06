@@ -132,7 +132,7 @@
         .days-grid { 
             display: grid; 
             grid-template-columns: repeat(7, 1fr); 
-            gap: 6px 4px;
+            gap: 6px 0px; /* 横のギャップを0にして一本の線に繋げやすくします */
         }
         
         .day-cell { 
@@ -141,7 +141,7 @@
             flex-direction: column; 
             align-items: center; 
             justify-content: flex-start; 
-            padding: 4px 2px; 
+            padding: 4px 0px; /* 横パディングを0に調整 */
             min-height: 48px; 
             cursor: pointer; 
             border-radius: 8px; 
@@ -155,10 +155,36 @@
         
         .cell-name-container { width: 100%; display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
         
-        /* 予定バッジ */
+        /* 予定バッジ（基本型） */
         .cell-name-badge { font-size: 9px; font-weight: 600; color: #fff; background-color: var(--cal-blue); padding: 1px 3px; border-radius: 3px; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .other-month .cell-name-badge { background-color: rgba(10, 132, 255, 0.35); color: rgba(255, 255, 255, 0.7); }
         .is-today .cell-name-badge { background-color: rgba(255, 255, 255, 0.25); color: #ffffff; }
+
+        /* ──── 🔄 【新規追加】複数日にまたがる連日バー用のスタイル ──── */
+        .cell-name-badge.span-start {
+            border-radius: 4px 0 0 4px;
+            width: calc(100% + 2px); /* グリッドの境界を少しオーバーラップさせて隙間を消す */
+            text-align: left;
+            padding-left: 4px;
+        }
+        .cell-name-badge.span-middle {
+            border-radius: 0;
+            width: calc(100% + 4px);
+            margin-left: -2px;
+            color: transparent !important; /* 文字を見えなくする */
+            text-shadow: none;
+        }
+        .cell-name-badge.span-end {
+            border-radius: 0 4px 4px 0;
+            width: calc(100% + 2px);
+            margin-left: -2px;
+            color: transparent !important; /* 文字を見えなくする */
+            text-shadow: none;
+        }
+        /* 日曜日（右端）または月曜日（左端）でバーが途切れるのを防ぐ微調整 */
+        .days-grid > div:nth-child(7n) .cell-name-badge.span-start,
+        .days-grid > div:nth-child(7n) .cell-name-badge.span-middle { width: 100%; }
+        /* ──────────────────────────────────────────────────────── */
 
         /* モーダル関連 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); display: flex; justify-content: center; align-items: flex-end; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
@@ -174,7 +200,7 @@
 
         .form-group { margin-bottom: 16px; }
         .form-group label { display: block; font-size: 12px; font-weight: 600; color: #8e8e93; margin-bottom: 6px; }
-        .form-group input[type="text"], .form-group input[type="time"] { width: 100%; padding: 12px; background: #2c2c2e; border: 1px solid #38383a; border-radius: 10px; font-size: 15px; color: #fff; outline: none; }
+        .form-group input[type="text"], .form-group input[type="time"], .form-group input[type="date"] { width: 100%; padding: 12px; background: #2c2c2e; border: 1px solid #38383a; border-radius: 10px; font-size: 15px; color: #fff; outline: none; }
         .form-group input[type="text"]::placeholder { color: #636366; }
         
         .allday-switch-group { display: flex; align-items: center; justify-content: space-between; background: #2c2c2e; padding: 12px; border-radius: 10px; margin-bottom: 16px; border: 1px solid #38383a; }
@@ -261,6 +287,10 @@
                 <input type="time" id="inputTime" value="12:00">
             </div>
             <div class="form-group">
+                <label for="inputEndDate">終了日（連日の予定にする場合選択）</label>
+                <input type="date" id="inputEndDate">
+            </div>
+            <div class="form-group">
                 <label for="inputDetail">詳細</label>
                 <input type="text" id="inputDetail" placeholder="例: 出張 / お休み">
             </div>
@@ -298,7 +328,7 @@
         // ====================================================================
         let db = null;
 
-        if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+        if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app); 
         }
@@ -325,14 +355,14 @@
         // --- 🔥 Firebase Firestore リアルタイム同期の設定 ---
         function initFirebaseSync() {
             if (!db) {
-                // Firebaseがまだ設定されていない場合のテスト用初期データ
+                // Firebaseがまだ設定されていない場合のテスト用初期データ（連日予定のサンプルを追加）
                 events = {
                     [getDateKey(realToday)]: [
-                        { name: "田中", time: "10:00", isAllDay: false, detail: "クライアントMTG" },
-                        { name: "佐藤", time: "", isAllDay: true, detail: "創立記念日でお休み" }
+                        { name: "田中", time: "10:00", isAllDay: false, detail: "クライアントMTG", endDate: "" },
+                        { name: "佐藤", time: "", isAllDay: true, detail: "出張研修", endDate: getDateKey(new Date(realToday.getFullYear(), realToday.getMonth(), realToday.getDate() + 2)) }
                     ],
                     [getDateKey(realTomorrow)]: [
-                        { name: "鈴木", time: "11:00", isAllDay: false, detail: "週次定例会" }
+                        { name: "鈴木", time: "11:00", isAllDay: false, detail: "週次定例会", endDate: "" }
                     ]
                 };
                 refreshAllViews();
@@ -391,7 +421,7 @@
             return eventList.sort((a, b) => {
                 if (a.isAllDay && !b.isAllDay) return -1;
                 if (!a.isAllDay && b.isAllDay) return 1;
-                return a.time.localeCompare(b.time);
+                return (a.time || "").localeCompare(b.time || "");
             });
         }
 
@@ -400,18 +430,51 @@
             document.getElementById('today-date').innerText = `${realToday.getMonth() + 1}月${realToday.getDate()}日`;
         }
 
+        // 指定した日付が含まれる予定をすべて抽出する（連日予定対応版）
+        function getEventsForDate(date) {
+            const targetKey = getDateKey(date);
+            const targetTime = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+            let result = [];
+
+            // 1. 直接該当日に登録されている予定
+            if (events[targetKey]) {
+                events[targetKey].forEach((ev, idx) => {
+                    result.push({ ...ev, _originKey: targetKey, _index: idx, _type: ev.endDate ? 'start' : 'single' });
+                });
+            }
+
+            // 2. 他の開始日から連なっている予定
+            Object.keys(events).forEach(key => {
+                if (key === targetKey) return; 
+                events[key].forEach((ev, idx) => {
+                    if (ev.endDate) {
+                        const startParts = key.split('-');
+                        const endParts = ev.endDate.split('-');
+                        const startTime = new Date(startParts[0], startParts[1] - 1, startParts[2]).getTime();
+                        const endTime = new Date(endParts[0], endParts[1] - 1, endParts[2]).getTime();
+
+                        if (targetTime >= startTime && targetTime <= endTime) {
+                            const type = targetTime === endTime ? 'end' : 'middle';
+                            result.push({ ...ev, _originKey: key, _index: idx, _type: type });
+                        }
+                    }
+                });
+            });
+            return result;
+        }
+
         function renderDetailedList() {
             renderDayList(realToday, 'today-events-list', 'today-item');
             renderDayList(realTomorrow, 'tomorrow-events-list', 'tomorrow-item');
         }
 
         function renderDayList(date, containerId, itemClass) {
-            const key = getDateKey(date);
             const container = document.getElementById(containerId);
             container.innerHTML = '';
+            const dayEvents = getEventsForDate(date);
 
-            if (events[key] && events[key].length > 0) {
-                const sortedEvents = sortEvents([...events[key]]);
+            if (dayEvents.length > 0) {
+                const sortedEvents = sortEvents([...dayEvents]);
                 sortedEvents.forEach(eventObj => {
                     const item = document.createElement('div');
                     item.classList.add('timeline-item', itemClass);
@@ -425,7 +488,7 @@
                             ${timeDisplay}
                             <span class="item-name">${eventObj.name}</span>
                         </div>
-                        <div class="item-right">${eventObj.detail}</div>
+                        <div class="item-right">${eventObj.detail} ${eventObj.endDate ? '<span style="font-size:10px; color:var(--text-sub); margin-left:6px;">🔄 連日</span>' : ''}</div>
                         <div></div>
                     `;
                     container.appendChild(item);
@@ -476,14 +539,33 @@
             dayNumber.innerText = cellDate.getDate();
             cell.appendChild(dayNumber);
 
-            if (events[dateKey] && events[dateKey].length > 0) {
+            // 📅 連日対応の判定が入ったイベントリストを取得
+            const dayEvents = getEventsForDate(cellDate);
+
+            if (dayEvents.length > 0) {
                 const nameContainer = document.createElement('div');
                 nameContainer.classList.add('cell-name-container');
-                const sortedEvents = sortEvents([...events[dateKey]]);
+                const sortedEvents = sortEvents([...dayEvents]);
+                
                 sortedEvents.forEach(eventObj => {
                     const nameBadge = document.createElement('div');
                     nameBadge.classList.add('cell-name-badge');
-                    nameBadge.innerText = eventObj.isAllDay ? `[終]${eventObj.name}` : eventObj.name;
+                    
+                    // 🔄 タイプ（開始・中間・終了）に応じたクラス追加とテキスト表示制御
+                    if (eventObj._type === 'start') {
+                        nameBadge.classList.add('span-start');
+                        nameBadge.innerText = eventObj.isAllDay ? `[終]${eventObj.name}` : eventObj.name;
+                    } else if (eventObj._type === 'middle') {
+                        nameBadge.classList.add('span-middle');
+                        nameBadge.innerText = '—'; // CSSで消えますがフォールバック用
+                    } else if (eventObj._type === 'end') {
+                        nameBadge.classList.add('span-end');
+                        nameBadge.innerText = '—';
+                    } else {
+                        // 通常の1日のみの予定
+                        nameBadge.innerText = eventObj.isAllDay ? `[終]${eventObj.name}` : eventObj.name;
+                    }
+                    
                     nameContainer.appendChild(nameBadge);
                 });
                 cell.appendChild(nameContainer);
@@ -523,10 +605,15 @@
             
             container.innerHTML = '';
             
-            if (events[selectedDateKey] && events[selectedDateKey].length > 0) {
-                sortEvents(events[selectedDateKey]);
+            // 選択された日にまたがっている全ての予定を抽出
+            const parts = selectedDateKey.split('-');
+            const currentObjDate = new Date(parts[0], parts[1] - 1, parts[2]);
+            const dayEvents = getEventsForDate(currentObjDate);
+            
+            if (dayEvents.length > 0) {
+                sortEvents(dayEvents);
 
-                events[selectedDateKey].forEach((eventObj, index) => {
+                dayEvents.forEach((eventObj) => {
                     const item = document.createElement('div');
                     item.classList.add('timeline-item');
 
@@ -534,25 +621,28 @@
                         ? `<span class="item-time all-day">終日</span>` 
                         : `<span class="item-time">${eventObj.time}</span>`;
 
+                    // 連日予定の場合は期間表示を追加
+                    const rangeDisplay = eventObj.endDate ? `<br><span style="font-size:10px; color:var(--text-sub);">期間: ${eventObj._originKey} ～ ${eventObj.endDate}</span>` : '';
+
                     item.innerHTML = `
                         <div class="item-left">
                             ${timeDisplay}
                             <span class="item-name" style="color:var(--text-sub);">${eventObj.name}</span>
                         </div>
-                        <div class="item-right" style="color:#3a3a3c;">${eventObj.detail}</div>
+                        <div class="item-right" style="color:#3a3a3c;">${eventObj.detail}${rangeDisplay}</div>
                         <div class="item-actions">
-                            <button class="btn-inline btn-inline-edit" data-index="${index}">修正</button>
-                            <button class="btn-inline btn-inline-delete" data-index="${index}">削除</button>
+                            <button class="btn-inline btn-inline-edit" data-origin="${eventObj._originKey}" data-index="${eventObj._index}">修正</button>
+                            <button class="btn-inline btn-inline-delete" data-origin="${eventObj._originKey}" data-index="${eventObj._index}">削除</button>
                         </div>
                     `;
                     container.appendChild(item);
                 });
 
                 container.querySelectorAll('.btn-inline-edit').forEach(btn => {
-                    btn.addEventListener('click', (e) => editEventInline(parseInt(e.target.dataset.index)));
+                    btn.addEventListener('click', (e) => editEventInline(e.target.dataset.origin, parseInt(e.target.dataset.index)));
                 });
                 container.querySelectorAll('.btn-inline-delete').forEach(btn => {
-                    btn.addEventListener('click', (e) => deleteEventInline(parseInt(e.target.dataset.index)));
+                    btn.addEventListener('click', (e) => deleteEventInline(e.target.dataset.origin, parseInt(e.target.dataset.index)));
                 });
             } else {
                 const noEvent = document.createElement('div');
@@ -565,24 +655,28 @@
             section.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
-        function editEventInline(index) {
+        function editEventInline(originKey, index) {
+            // 編集対象の元のキーとインデックスを保持
+            selectedDateKey = originKey; 
             editingIndex = index;
-            const targetEvent = events[selectedDateKey][index];
+            const targetEvent = events[originKey][index];
             
-            document.getElementById('inputModalTitle').innerText = `${selectedDateDisplayLabel} の予定を修正`;
+            const startParts = originKey.split('-');
+            document.getElementById('inputModalTitle').innerText = `${parseInt(startParts[1])}月${parseInt(startParts[2])}日 の予定を修正`;
             document.getElementById('inputName').value = targetEvent.name;
             document.getElementById('inputAllDay').checked = targetEvent.isAllDay;
             document.getElementById('inputTime').value = targetEvent.isAllDay ? "12:00" : targetEvent.time;
+            document.getElementById('inputEndDate').value = targetEvent.endDate || "";
             document.getElementById('inputDetail').value = targetEvent.detail;
             
             toggleTimeInput(targetEvent.isAllDay);
             document.getElementById('inputModalOverlay').classList.add('active');
         }
 
-        async function deleteEventInline(index) {
-            if (confirm("この予定を削除してもよろしいですか？")) {
-                events[selectedDateKey].splice(index, 1);
-                if (events[selectedDateKey].length === 0) delete events[selectedDateKey];
+        async function deleteEventInline(originKey, index) {
+            if (confirm("この予定を削除してもよろしいですか？（連日の場合は全日程から削除されます）")) {
+                events[originKey].splice(index, 1);
+                if (events[originKey].length === 0) delete events[originKey];
                 
                 await syncToFirebase();
                 if (!db) { refreshAllViews(); renderSelectedDateDetails(); }
@@ -594,6 +688,7 @@
             document.getElementById('inputName').value = '';
             document.getElementById('inputAllDay').checked = false;
             document.getElementById('inputTime').value = '12:00';
+            document.getElementById('inputEndDate').value = '';
             document.getElementById('inputDetail').value = '';
             toggleTimeInput(false);
             document.getElementById('inputModalOverlay').classList.add('active');
@@ -604,14 +699,21 @@
             const name = document.getElementById('inputName').value.trim();
             const isAllDay = document.getElementById('inputAllDay').checked;
             const time = isAllDay ? "" : document.getElementById('inputTime').value.trim();
+            const endDate = document.getElementById('inputEndDate').value; // YYYY-MM-DD 形式
             const detail = document.getElementById('inputDetail').value.trim();
 
             if (!name || (!isAllDay && !time) || !detail) {
-                alert("すべての項目を入力してください。");
+                alert("必要な項目を入力してください。");
                 return;
             }
 
-            const eventData = { name, time, isAllDay, detail };
+            // バリデーション: 終了日が開始日より前の場合はエラー
+            if (endDate && endDate < selectedDateKey) {
+                alert("終了日は開始日より後の日付を指定してください。");
+                return;
+            }
+
+            const eventData = { name, time, isAllDay, detail, endDate };
 
             if (editingIndex !== null) {
                 events[selectedDateKey][editingIndex] = eventData;
@@ -642,6 +744,6 @@
         // 🚀 初期起動
         initHeaders();
         initFirebaseSync();
-    </script>
+</script>
 </body>
 </html>
